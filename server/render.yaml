@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: taxstack-api
+    runtime: node
+    buildCommand: npm install
+    startCommand: node src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        sync: false
+    healthCheckPath: /api/health

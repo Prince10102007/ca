@@ -1,0 +1,13 @@
+{
+  "name": "gst-reconciliation-tool",
+  "version": "1.0.0",
+  "description": "GST Invoice Reconciliation and GSTR-1 Helper for Indian CAs",
+  "private": true,
+  "scripts": {
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "start": "cd server && node src/index.js",
+    "install-all": "cd server && npm install && cd ../client && npm install",
+    "generate-samples": "cd sample-data && node generate-samples.js"
+  }
+}
