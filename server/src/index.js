@@ -427,11 +427,19 @@ app.post('/api/tally/push', async (req, res) => {
     });
 
     // Check if Tally returned an error in its XML response
-    const hasError = result.body.includes('<LINEERROR>') || result.body.includes('<ERRORS>');
+    const hasLineError = result.body.includes('<LINEERROR>');
+    const errorsMatch = result.body.match(/<ERRORS>(\d+)<\/ERRORS>/);
+    const errorCount = errorsMatch ? parseInt(errorsMatch[1]) : 0;
+    const hasError = hasLineError || errorCount > 0;
+
     if (hasError) {
-      return res.json({ success: false, message: 'Tally reported errors during import', tallyResponse: result.body });
+      const lineErr = result.body.match(/<LINEERROR>(.*?)<\/LINEERROR>/);
+      const msg = lineErr ? `Tally error: ${lineErr[1]}` : `Tally reported ${errorCount} error(s)`;
+      return res.json({ success: false, message: msg, tallyResponse: result.body });
     }
-    res.json({ success: true, message: 'Data pushed to Tally successfully', tallyResponse: result.body });
+    const createdMatch = result.body.match(/<CREATED>(\d+)<\/CREATED>/);
+    const created = createdMatch ? parseInt(createdMatch[1]) : 0;
+    res.json({ success: true, message: `Imported successfully! ${created} record(s) created.`, tallyResponse: result.body });
   } catch (err) {
     const msg = err.code === 'ECONNREFUSED'
       ? 'Cannot connect to Tally. Make sure Tally is running and XML Server is enabled (F12 > Advanced Config > Enable XML Server = Yes)'

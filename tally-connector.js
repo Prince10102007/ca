@@ -54,14 +54,31 @@ const server = http.createServer((req, res) => {
       let tallyData = '';
       tallyRes.on('data', chunk => tallyData += chunk);
       tallyRes.on('end', () => {
-        const hasError = tallyData.includes('<LINEERROR>') || tallyData.includes('<ERRORS>');
+        // Check for actual errors — <LINEERROR> means real error, <ERRORS>0</ERRORS> means success
+        const hasLineError = tallyData.includes('<LINEERROR>');
+        const errorsMatch = tallyData.match(/<ERRORS>(\d+)<\/ERRORS>/);
+        const errorCount = errorsMatch ? parseInt(errorsMatch[1]) : 0;
+        const hasError = hasLineError || errorCount > 0;
+
+        // Extract created/altered counts
+        const createdMatch = tallyData.match(/<CREATED>(\d+)<\/CREATED>/);
+        const created = createdMatch ? parseInt(createdMatch[1]) : 0;
+
+        let message;
+        if (hasError) {
+          const lineErr = tallyData.match(/<LINEERROR>(.*?)<\/LINEERROR>/);
+          message = lineErr ? `Tally error: ${lineErr[1]}` : `Tally reported ${errorCount} error(s)`;
+        } else {
+          message = `Imported successfully! ${created} record(s) created.`;
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: !hasError,
-          message: hasError ? 'Tally reported errors. Import ledger masters first.' : 'Data imported into Tally successfully!',
+          message,
           tallyResponse: tallyData
         }));
-        console.log(hasError ? '  ✗ Tally reported errors' : '  ✓ Imported successfully');
+        console.log(hasError ? `  ✗ ${message}` : `  ✓ ${message}`);
       });
     });
 
