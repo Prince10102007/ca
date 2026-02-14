@@ -164,37 +164,17 @@ export async function exportOCRExcel(invoices: any[]) {
 // ─── Tally Push API ───
 
 export async function pushToTally(xml: string, tallyUrl?: string): Promise<{ success: boolean; message: string; tallyResponse?: string }> {
-  const url = tallyUrl || 'http://localhost:9000';
-
-  // Try direct browser → Tally connection first (works when Tally is on user's machine)
+  // Try local Tally Connector proxy first (runs on customer's PC at port 7777)
+  const connectorUrl = 'http://localhost:7777';
   try {
-    const directRes = await fetch(url, {
+    const res = await fetch(connectorUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/xml' },
-      body: xml,
-      mode: 'no-cors' as RequestMode
+      body: xml
     });
-
-    // no-cors means we can't read the response, but if it didn't throw, the request was sent
-    // Try a readable request to verify
-    try {
-      const verifyRes = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/xml' },
-        body: xml
-      });
-      const responseText = await verifyRes.text();
-      const hasError = responseText.includes('<LINEERROR>') || responseText.includes('<ERRORS>');
-      if (hasError) {
-        return { success: false, message: 'Tally reported errors during import. Check if ledger masters are imported first.', tallyResponse: responseText };
-      }
-      return { success: true, message: 'Data pushed to Tally successfully!', tallyResponse: responseText };
-    } catch {
-      // CORS blocked reading response but request was sent — assume success
-      return { success: true, message: 'Data sent to Tally. Open Tally Day Book to verify the import.' };
-    }
-  } catch (directErr) {
-    // Direct connection failed — try through backend proxy as fallback
+    return res.json();
+  } catch {
+    // Connector not running — try backend proxy as fallback (works when backend is local)
     try {
       const res = await request('/tally/push', {
         method: 'POST',
@@ -202,12 +182,12 @@ export async function pushToTally(xml: string, tallyUrl?: string): Promise<{ suc
         body: JSON.stringify({ xml, tallyUrl })
       });
       return res.json();
-    } catch (proxyErr: any) {
+    } catch {
       throw new Error(
-        'Cannot connect to Tally. Make sure:\n' +
-        '1. Tally is running on your computer\n' +
-        '2. XML Server is enabled (F12 > Advanced Config > Enable XML Server = Yes)\n' +
-        '3. Port is set to 9000'
+        'Cannot connect to Tally. Please run the Tally Connector:\n' +
+        '1. Open Command Prompt on your PC\n' +
+        '2. Run: node tally-connector.js\n' +
+        '3. Keep it open and try again'
       );
     }
   }
