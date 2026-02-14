@@ -338,12 +338,47 @@ function parseOCRText(text) {
   if (gstins.length >= 1) result.sellerGSTIN = gstins[0];
   if (gstins.length >= 2) result.customerGSTIN = gstins[1];
 
-  // Extract Invoice Number
+  // Extract seller/buyer names
+  const namePatterns = {
+    seller: [
+      /(?:SOLD\s*BY|SELLER|FROM|SUPPLIER|VENDOR|BILLED\s*BY)[:\s]+([A-Za-z][A-Za-z\s&.,']+)/i,
+      /(?:M\/S|M\/s)[.\s]+([A-Za-z][A-Za-z\s&.,']+)/i
+    ],
+    buyer: [
+      /(?:SOLD\s*TO|BUYER|BILL\s*TO|BILLED\s*TO|SHIP\s*TO|CUSTOMER|RECIPIENT)[:\s]+([A-Za-z][A-Za-z\s&.,']+)/i
+    ]
+  };
+  for (const pat of namePatterns.seller) {
+    const m = text.match(pat);
+    if (m) { result.sellerName = m[1].trim().replace(/\s+/g, ' '); break; }
+  }
+  for (const pat of namePatterns.buyer) {
+    const m = text.match(pat);
+    if (m) { result.customerName = m[1].trim().replace(/\s+/g, ' '); break; }
+  }
+  // Fallback: try to extract names from lines near GSTINs
+  if (!result.sellerName || !result.customerName) {
+    for (let i = 0; i < lines.length; i++) {
+      if (/\d{2}[A-Z]{5}\d{4}[A-Z]\d[Z][A-Z0-9]/i.test(lines[i])) {
+        // Check lines above and below GSTIN for a company name
+        const candidates = [i - 1, i + 1];
+        for (const ci of candidates) {
+          if (ci >= 0 && ci < lines.length && /^[A-Za-z][A-Za-z\s&.,']{3,}$/.test(lines[ci])) {
+            const name = lines[ci].trim();
+            if (!result.sellerName) { result.sellerName = name; break; }
+            else if (!result.customerName && name !== result.sellerName) { result.customerName = name; break; }
+          }
+        }
+      }
+    }
+  }
+
+  // Extract Invoice Number (stop before keywords like Date, Place, etc.)
   const invPatterns = [
-    /(?:INVOICE\s*(?:NO|NUMBER|#)[.:;\s]*)\s*([A-Z0-9\-\/]+)/i,
-    /(?:BILL\s*(?:NO|NUMBER|#)[.:;\s]*)\s*([A-Z0-9\-\/]+)/i,
-    /(?:INV[.\s\-]*(?:NO)?[.:;\s]*)\s*([A-Z0-9\-\/]+)/i,
-    /(?:VOUCHER\s*(?:NO)?[.:;\s]*)\s*([A-Z0-9\-\/]+)/i
+    /(?:INVOICE\s*(?:NO|NUMBER|#)[.:;\s]*)\s*([A-Z0-9\-\/]+?)(?=\s|Date|Place|$)/i,
+    /(?:BILL\s*(?:NO|NUMBER|#)[.:;\s]*)\s*([A-Z0-9\-\/]+?)(?=\s|Date|Place|$)/i,
+    /(?:INV[.\s\-]*(?:NO)?[.:;\s]*)\s*([A-Z0-9\-\/]+?)(?=\s|Date|Place|$)/i,
+    /(?:VOUCHER\s*(?:NO)?[.:;\s]*)\s*([A-Z0-9\-\/]+?)(?=\s|Date|Place|$)/i
   ];
   for (const pat of invPatterns) {
     const m = text.match(pat);
