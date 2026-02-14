@@ -38,8 +38,8 @@ const docDefinition = {
         {
           width: '50%',
           stack: [
-            { text: 'Invoice No: INV/2024/0847', bold: true, fontSize: 10 },
-            { text: 'Date: 15-01-2024', margin: [0, 2, 0, 0] },
+            { text: 'Invoice No: INV/2025/0847', bold: true, fontSize: 10 },
+            { text: 'Date: 15-06-2025', margin: [0, 2, 0, 0] },
             { text: 'Place of Supply: Maharashtra (27)' },
             { text: 'Reverse Charge: No', margin: [0, 2, 0, 0] },
           ],
@@ -219,8 +219,8 @@ console.log('Generated:', pdfPath);
 // Also generate a second invoice as simple text-based image simulation
 // Create a text file that shows what the invoice data should extract to
 const expectedData = {
-  invoiceNo: 'INV/2024/0847',
-  date: '15-01-2024',
+  invoiceNo: 'INV/2025/0847',
+  date: '15-06-2025',
   sellerName: 'SHARMA ELECTRONICS PVT LTD',
   sellerGSTIN: '27AABCS1234R1ZP',
   buyerName: 'PATEL TRADING COMPANY',

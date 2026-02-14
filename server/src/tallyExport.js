@@ -1,7 +1,7 @@
 /**
  * Tally Export Module
  * Generates Tally-compatible XML vouchers for bulk import
- * Supports Tally ERP 9 and Tally Prime XML format
+ * Uses official TallyPrime XML format
  */
 
 const fs = require('fs');
@@ -56,6 +56,7 @@ function xmlEscape(str) {
 
 /**
  * Generate Tally-compatible XML for sales vouchers
+ * Uses official TallyPrime XML import format
  */
 function generateSalesVouchers(invoices, options = {}) {
   const companyName = options.companyName || 'My Company';
@@ -68,17 +69,18 @@ function generateSalesVouchers(invoices, options = {}) {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>Import Data</TALLYREQUEST>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Import</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>Vouchers</ID>
   </HEADER>
   <BODY>
-    <IMPORTDATA>
-      <REQUESTDESC>
-        <REPORTNAME>Vouchers</REPORTNAME>
-        <STATICVARIABLES>
-          <SVCURRENTCOMPANY>${xmlEscape(companyName)}</SVCURRENTCOMPANY>
-        </STATICVARIABLES>
-      </REQUESTDESC>
-      <REQUESTDATA>
+    <DESC>
+      <STATICVARIABLES>
+        <SVCURRENTCOMPANY>${xmlEscape(companyName)}</SVCURRENTCOMPANY>
+      </STATICVARIABLES>
+    </DESC>
+    <DATA>
 `;
 
   for (const inv of invoices) {
@@ -95,77 +97,70 @@ function generateSalesVouchers(invoices, options = {}) {
     const stateName = STATE_MAP[stateCode] || placeOfSupply;
     const isInterState = igst > 0;
 
-    xml += `        <TALLYMESSAGE xmlns:UDF="TallyUDF">
-          <VOUCHER VCHTYPE="${xmlEscape(voucherType)}" ACTION="Create" OBJCLS="Voucher" REMOTEID="">
-            <DATE>${tallyDate}</DATE>
-            <VOUCHERTYPENAME>${xmlEscape(voucherType)}</VOUCHERTYPENAME>
-            <VOUCHERNUMBER>${xmlEscape(inv.invoiceNo)}</VOUCHERNUMBER>
-            <REFERENCE>${xmlEscape(inv.invoiceNo)}</REFERENCE>
-            <PARTYLEDGERNAME>${xmlEscape(partyName)}</PARTYLEDGERNAME>
-            <PARTYGSTIN>${xmlEscape(gstin)}</PARTYGSTIN>
-            <PLACEOFSUPPLY>${xmlEscape(stateName)}</PLACEOFSUPPLY>
-            <ISGSTAPPLICABLE>Yes</ISGSTAPPLICABLE>
-            <GSTTYPEOFSUPPLY>${isInterState ? 'Interstate' : 'Intrastate'}</GSTTYPEOFSUPPLY>
-            <NARRATION>Sales Invoice ${xmlEscape(inv.invoiceNo)} to ${xmlEscape(partyName)}</NARRATION>
-            <EFFECTIVEDATE>${tallyDate}</EFFECTIVEDATE>
-            <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+    xml += `      <TALLYMESSAGE>
+        <VOUCHER VCHTYPE="${xmlEscape(voucherType)}" ACTION="Create">
+          <DATE>${tallyDate}</DATE>
+          <VOUCHERTYPENAME>${xmlEscape(voucherType)}</VOUCHERTYPENAME>
+          <VOUCHERNUMBER>${xmlEscape(inv.invoiceNo)}</VOUCHERNUMBER>
+          <REFERENCE>${xmlEscape(inv.invoiceNo)}</REFERENCE>
+          <PARTYLEDGERNAME>${xmlEscape(partyName)}</PARTYLEDGERNAME>
+          <PARTYGSTIN>${xmlEscape(gstin)}</PARTYGSTIN>
+          <PLACEOFSUPPLY>${xmlEscape(stateName)}</PLACEOFSUPPLY>
+          <ISINVOICE>Yes</ISINVOICE>
+          <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+          <NARRATION>Sales Invoice ${xmlEscape(inv.invoiceNo)} to ${xmlEscape(partyName)}</NARRATION>
 `;
 
     // Party ledger entry (debit - customer owes total)
-    xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(partyName)}</LEDGERNAME>
-              <GSTCLASS/>
-              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-              <AMOUNT>-${totalAmount.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+    xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(partyName)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+            <ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+            <AMOUNT>-${totalAmount.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
 
     // Sales ledger entry (credit - taxable amount)
-    xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(salesLedger)}</LEDGERNAME>
-              <GSTCLASS/>
-              <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-              <AMOUNT>${taxableAmount.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+    xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(salesLedger)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <AMOUNT>${taxableAmount.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
 
     // Tax entries
     if (isInterState && igst > 0) {
-      xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(igstLedger)}</LEDGERNAME>
-              <GSTCLASS/>
-              <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-              <AMOUNT>${igst.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+      xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(igstLedger)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <AMOUNT>${igst.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
     } else {
       if (cgst > 0) {
-        xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(cgstLedger)}</LEDGERNAME>
-              <GSTCLASS/>
-              <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-              <AMOUNT>${cgst.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+        xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(cgstLedger)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <AMOUNT>${cgst.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
       }
       if (sgst > 0) {
-        xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(sgstLedger)}</LEDGERNAME>
-              <GSTCLASS/>
-              <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-              <AMOUNT>${sgst.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+        xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(sgstLedger)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <AMOUNT>${sgst.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
       }
     }
 
-    xml += `          </VOUCHER>
-        </TALLYMESSAGE>
+    xml += `        </VOUCHER>
+      </TALLYMESSAGE>
 `;
   }
 
-  xml += `      </REQUESTDATA>
-    </IMPORTDATA>
+  xml += `    </DATA>
   </BODY>
 </ENVELOPE>`;
 
@@ -174,6 +169,7 @@ function generateSalesVouchers(invoices, options = {}) {
 
 /**
  * Generate Tally-compatible XML for purchase vouchers
+ * Uses official TallyPrime XML import format
  */
 function generatePurchaseVouchers(invoices, options = {}) {
   const companyName = options.companyName || 'My Company';
@@ -186,17 +182,18 @@ function generatePurchaseVouchers(invoices, options = {}) {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>Import Data</TALLYREQUEST>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Import</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>Vouchers</ID>
   </HEADER>
   <BODY>
-    <IMPORTDATA>
-      <REQUESTDESC>
-        <REPORTNAME>Vouchers</REPORTNAME>
-        <STATICVARIABLES>
-          <SVCURRENTCOMPANY>${xmlEscape(companyName)}</SVCURRENTCOMPANY>
-        </STATICVARIABLES>
-      </REQUESTDESC>
-      <REQUESTDATA>
+    <DESC>
+      <STATICVARIABLES>
+        <SVCURRENTCOMPANY>${xmlEscape(companyName)}</SVCURRENTCOMPANY>
+      </STATICVARIABLES>
+    </DESC>
+    <DATA>
 `;
 
   for (const inv of invoices) {
@@ -212,72 +209,70 @@ function generatePurchaseVouchers(invoices, options = {}) {
     const stateCode = gstin ? gstin.substring(0, 2) : '';
     const stateName = STATE_MAP[stateCode] || inv.placeOfSupply || '';
 
-    xml += `        <TALLYMESSAGE xmlns:UDF="TallyUDF">
-          <VOUCHER VCHTYPE="${xmlEscape(voucherType)}" ACTION="Create" OBJCLS="Voucher" REMOTEID="">
-            <DATE>${tallyDate}</DATE>
-            <VOUCHERTYPENAME>${xmlEscape(voucherType)}</VOUCHERTYPENAME>
-            <VOUCHERNUMBER>${xmlEscape(inv.invoiceNo)}</VOUCHERNUMBER>
-            <REFERENCE>${xmlEscape(inv.invoiceNo)}</REFERENCE>
-            <PARTYLEDGERNAME>${xmlEscape(partyName)}</PARTYLEDGERNAME>
-            <PARTYGSTIN>${xmlEscape(gstin)}</PARTYGSTIN>
-            <PLACEOFSUPPLY>${xmlEscape(stateName)}</PLACEOFSUPPLY>
-            <ISGSTAPPLICABLE>Yes</ISGSTAPPLICABLE>
-            <GSTTYPEOFSUPPLY>${isInterState ? 'Interstate' : 'Intrastate'}</GSTTYPEOFSUPPLY>
-            <NARRATION>Purchase ${xmlEscape(inv.invoiceNo)} from ${xmlEscape(partyName)}</NARRATION>
-            <EFFECTIVEDATE>${tallyDate}</EFFECTIVEDATE>
-            <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+    xml += `      <TALLYMESSAGE>
+        <VOUCHER VCHTYPE="${xmlEscape(voucherType)}" ACTION="Create">
+          <DATE>${tallyDate}</DATE>
+          <VOUCHERTYPENAME>${xmlEscape(voucherType)}</VOUCHERTYPENAME>
+          <VOUCHERNUMBER>${xmlEscape(inv.invoiceNo)}</VOUCHERNUMBER>
+          <REFERENCE>${xmlEscape(inv.invoiceNo)}</REFERENCE>
+          <PARTYLEDGERNAME>${xmlEscape(partyName)}</PARTYLEDGERNAME>
+          <PARTYGSTIN>${xmlEscape(gstin)}</PARTYGSTIN>
+          <PLACEOFSUPPLY>${xmlEscape(stateName)}</PLACEOFSUPPLY>
+          <ISINVOICE>Yes</ISINVOICE>
+          <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>
+          <NARRATION>Purchase ${xmlEscape(inv.invoiceNo)} from ${xmlEscape(partyName)}</NARRATION>
 `;
 
     // Purchase ledger (debit - we bought goods)
-    xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(purchaseLedger)}</LEDGERNAME>
-              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-              <AMOUNT>-${taxableAmount.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+    xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(purchaseLedger)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+            <AMOUNT>-${taxableAmount.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
 
     // Tax entries (debit - ITC)
     if (isInterState && igst > 0) {
-      xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(igstLedger)}</LEDGERNAME>
-              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-              <AMOUNT>-${igst.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+      xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(igstLedger)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+            <AMOUNT>-${igst.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
     } else {
       if (cgst > 0) {
-        xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(cgstLedger)}</LEDGERNAME>
-              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-              <AMOUNT>-${cgst.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+        xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(cgstLedger)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+            <AMOUNT>-${cgst.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
       }
       if (sgst > 0) {
-        xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(sgstLedger)}</LEDGERNAME>
-              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
-              <AMOUNT>-${sgst.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+        xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(sgstLedger)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+            <AMOUNT>-${sgst.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
       }
     }
 
     // Party ledger (credit - we owe vendor)
-    xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${xmlEscape(partyName)}</LEDGERNAME>
-              <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
-              <AMOUNT>${totalAmount.toFixed(2)}</AMOUNT>
-            </ALLLEDGERENTRIES.LIST>
+    xml += `          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>${xmlEscape(partyName)}</LEDGERNAME>
+            <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+            <ISPARTYLEDGER>Yes</ISPARTYLEDGER>
+            <AMOUNT>${totalAmount.toFixed(2)}</AMOUNT>
+          </LEDGERENTRIES.LIST>
 `;
 
-    xml += `          </VOUCHER>
-        </TALLYMESSAGE>
+    xml += `        </VOUCHER>
+      </TALLYMESSAGE>
 `;
   }
 
-  xml += `      </REQUESTDATA>
-    </IMPORTDATA>
+  xml += `    </DATA>
   </BODY>
 </ENVELOPE>`;
 
@@ -286,6 +281,7 @@ function generatePurchaseVouchers(invoices, options = {}) {
 
 /**
  * Generate Tally Ledger Master XML (create party ledgers)
+ * Uses official TallyPrime XML import format
  */
 function generateLedgerMasters(invoices, options = {}) {
   const companyName = options.companyName || 'My Company';
@@ -309,39 +305,39 @@ function generateLedgerMasters(invoices, options = {}) {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>Import Data</TALLYREQUEST>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Import</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>All Masters</ID>
   </HEADER>
   <BODY>
-    <IMPORTDATA>
-      <REQUESTDESC>
-        <REPORTNAME>All Masters</REPORTNAME>
-        <STATICVARIABLES>
-          <SVCURRENTCOMPANY>${xmlEscape(companyName)}</SVCURRENTCOMPANY>
-        </STATICVARIABLES>
-      </REQUESTDESC>
-      <REQUESTDATA>
+    <DESC>
+      <STATICVARIABLES>
+        <SVCURRENTCOMPANY>${xmlEscape(companyName)}</SVCURRENTCOMPANY>
+      </STATICVARIABLES>
+    </DESC>
+    <DATA>
 `;
 
   for (const [, party] of parties) {
-    xml += `        <TALLYMESSAGE xmlns:UDF="TallyUDF">
-          <LEDGER NAME="${xmlEscape(party.name)}" ACTION="Create">
-            <NAME.LIST>
-              <NAME>${xmlEscape(party.name)}</NAME>
-            </NAME.LIST>
-            <PARENT>${xmlEscape(parentGroup)}</PARENT>
-            <ISBILLWISEON>Yes</ISBILLWISEON>
-            <AFFECTSSTOCK>No</AFFECTSSTOCK>
-            <GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
-            <PARTYGSTIN>${xmlEscape(party.gstin)}</PARTYGSTIN>
-            <LEDSTATENAME>${xmlEscape(party.state)}</LEDSTATENAME>
-            <COUNTRYNAME>India</COUNTRYNAME>
-          </LEDGER>
-        </TALLYMESSAGE>
+    xml += `      <TALLYMESSAGE>
+        <LEDGER NAME="${xmlEscape(party.name)}" ACTION="Create">
+          <NAME.LIST>
+            <NAME>${xmlEscape(party.name)}</NAME>
+          </NAME.LIST>
+          <PARENT>${xmlEscape(parentGroup)}</PARENT>
+          <ISBILLWISEON>Yes</ISBILLWISEON>
+          <AFFECTSSTOCK>No</AFFECTSSTOCK>
+          <GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>
+          <PARTYGSTIN>${xmlEscape(party.gstin)}</PARTYGSTIN>
+          <LEDSTATENAME>${xmlEscape(party.state)}</LEDSTATENAME>
+          <COUNTRYNAME>India</COUNTRYNAME>
+        </LEDGER>
+      </TALLYMESSAGE>
 `;
   }
 
-  xml += `      </REQUESTDATA>
-    </IMPORTDATA>
+  xml += `    </DATA>
   </BODY>
 </ENVELOPE>`;
 
