@@ -30,11 +30,15 @@ const STATE_MAP = {
  */
 function toTallyDate(dateStr) {
   if (!dateStr) return '';
-  const parts = dateStr.split('-');
+  // Handle DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY separators
+  const parts = dateStr.split(/[-\/.]/);
   if (parts.length === 3) {
-    return `${parts[2]}${parts[1]}${parts[0]}`;
+    const dd = parts[0].padStart(2, '0');
+    const mm = parts[1].padStart(2, '0');
+    const yyyy = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+    return `${yyyy}${mm}${dd}`;
   }
-  return dateStr.replace(/-/g, '');
+  return dateStr.replace(/[-\/.]/g, '');
 }
 
 /**
